@@ -1,6 +1,7 @@
 package com.vpt.scout.ui.screens
 
 import android.Manifest
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -15,10 +16,14 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
 import com.google.android.gms.location.LocationServices
 import com.vpt.scout.*
@@ -37,6 +42,24 @@ enum class ScoutState {
     SUBMITTING,
     COMPLETE
 }
+
+/**
+ * Answer picked in the "I'm Here" dialog.
+ */
+enum class ScoutVerdict {
+    YES,
+    NO,
+    MAYBE
+}
+
+/**
+ * scout_results has no verdict column, so the answer rides on follow_up:
+ * a "maybe" is a follow-up that carries notes.
+ */
+internal fun verdictFollowUp(verdict: ScoutVerdict): Boolean = verdict != ScoutVerdict.NO
+
+internal fun verdictNotes(verdict: ScoutVerdict, notes: String): String? =
+    if (verdict == ScoutVerdict.MAYBE) notes.trim().takeIf { it.isNotEmpty() } else null
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -57,6 +80,7 @@ fun LiveScoutScreen(
     var remainingCount by remember { mutableStateOf(0) }
     var userLocation by remember { mutableStateOf<Pair<Double, Double>?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
+    var submitError by remember { mutableStateOf<String?>(null) }
     var scoutedCount by remember { mutableStateOf(0) }
     
     // Location permission
@@ -109,19 +133,19 @@ fun LiveScoutScreen(
         }
     }
     
-    // Find next property
-    suspend fun findNextProperty() {
+    // Find next property; returns true when a new one was loaded
+    suspend fun findNextProperty(): Boolean {
         scoutState = ScoutState.FINDING_PROPERTY
         error = null
         
         val location = userLocation ?: getCurrentLocation()
         if (location == null) {
             error = "Could not get your location"
-            return
+            return false
         }
         userLocation = location
         
-        try {
+        return try {
             val response = propertyRepository.getNextProperty(
                 latitude = location.first,
                 longitude = location.second,
@@ -134,8 +158,10 @@ fun LiveScoutScreen(
                 currentProperty = response.property
                 remainingCount = response.remaining
                 scoutState = ScoutState.READY_TO_NAVIGATE
+                true
             } else {
                 scoutState = ScoutState.COMPLETE
+                false
             }
         } catch (e: Exception) {
             e.printStackTrace()
@@ -145,6 +171,7 @@ fun LiveScoutScreen(
             } else {
                 ScoutState.FINDING_PROPERTY
             }
+            false
         }
     }
     
@@ -156,45 +183,50 @@ fun LiveScoutScreen(
                     val uri = Uri.parse("google.navigation:q=$lat,$lng")
                     val intent = Intent(Intent.ACTION_VIEW, uri)
                     intent.setPackage("com.google.android.apps.maps")
-                    context.startActivity(intent)
-                    scoutState = ScoutState.NAVIGATING
+                    try {
+                        context.startActivity(intent)
+                        scoutState = ScoutState.NAVIGATING
+                    } catch (e: ActivityNotFoundException) {
+                        error = "Google Maps is not installed"
+                    }
                 }
             }
         }
     }
     
-    // Mark arrived (show questionnaire)
+    // Mark arrived (show yes/no/maybe dialog)
     fun onArrived() {
+        submitError = null
         scoutState = ScoutState.QUESTIONNAIRE
     }
     
-    // Submit questionnaire
-    fun submitQuestionnaire(
-        followUp: Boolean,
-        flyered: Boolean,
-        notes: String
-    ) {
+    // Save the verdict, then head straight to the next property
+    fun submitVerdict(verdict: ScoutVerdict, notes: String) {
         scope.launch {
             scoutState = ScoutState.SUBMITTING
+            submitError = null
             try {
                 currentProperty?.let { property ->
                     scoutRepository.submitScoutResult(
                         apn = property.apn,
-                        followUp = followUp,
-                        flyered = flyered,
-                        notes = notes.takeIf { it.isNotBlank() },
+                        followUp = verdictFollowUp(verdict),
+                        flyered = false,
+                        notes = verdictNotes(verdict, notes),
                         latitude = userLocation?.first,
                         longitude = userLocation?.second
                     )
                     scoutedCount++
                 }
-                // Get fresh location and find next
-                userLocation = getCurrentLocation()
-                findNextProperty()
             } catch (e: Exception) {
                 e.printStackTrace()
-                error = e.message ?: "Failed to submit"
+                submitError = e.message ?: "Failed to submit"
                 scoutState = ScoutState.QUESTIONNAIRE
+                return@launch
+            }
+            // Get fresh location and find next
+            userLocation = getCurrentLocation()
+            if (findNextProperty()) {
+                navigateToProperty()
             }
         }
     }
@@ -296,7 +328,8 @@ fun LiveScoutScreen(
                     LoadingContent("Finding nearest property...")
                 }
                 
-                ScoutState.READY_TO_NAVIGATE, ScoutState.NAVIGATING -> {
+                ScoutState.READY_TO_NAVIGATE, ScoutState.NAVIGATING,
+                ScoutState.QUESTIONNAIRE, ScoutState.SUBMITTING -> {
                     currentProperty?.let { property ->
                         PropertyCard(
                             property = property,
@@ -307,24 +340,19 @@ fun LiveScoutScreen(
                                 scope.launch { findNextProperty() }
                             }
                         )
+                        
+                        if (scoutState == ScoutState.QUESTIONNAIRE ||
+                            scoutState == ScoutState.SUBMITTING
+                        ) {
+                            ArrivedDialog(
+                                property = property,
+                                submitting = scoutState == ScoutState.SUBMITTING,
+                                error = submitError,
+                                onVerdict = { verdict, notes -> submitVerdict(verdict, notes) },
+                                onDismiss = { scoutState = ScoutState.READY_TO_NAVIGATE }
+                            )
+                        }
                     }
-                }
-                
-                ScoutState.QUESTIONNAIRE -> {
-                    key(currentProperty?.apn) {
-                        ScoutResultForm(
-                            property = currentProperty,
-                            submitButtonText = "Submit & Find Next",
-                            enabled = scoutState != ScoutState.SUBMITTING,
-                            onSubmit = { followUp, flyered, notes ->
-                                submitQuestionnaire(followUp, flyered, notes)
-                            }
-                        )
-                    }
-                }
-                
-                ScoutState.SUBMITTING -> {
-                    LoadingContent("Saving result...")
                 }
                 
                 ScoutState.COMPLETE -> {
@@ -459,6 +487,116 @@ private fun PropertyCard(
                 Text("I'm Here")
             }
         }
+    }
+}
+
+@Composable
+internal fun ArrivedDialog(
+    property: Property,
+    submitting: Boolean,
+    error: String?,
+    onVerdict: (verdict: ScoutVerdict, notes: String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var askingNotes by remember { mutableStateOf(false) }
+    var notes by remember { mutableStateOf("") }
+    val notesFocus = remember { FocusRequester() }
+    
+    AlertDialog(
+        onDismissRequest = {
+            when {
+                submitting -> Unit
+                askingNotes -> askingNotes = false
+                else -> onDismiss()
+            }
+        },
+        // Don't lose typed notes to a stray tap outside the dialog
+        properties = DialogProperties(dismissOnClickOutside = !askingNotes),
+        title = { Text(property.address ?: property.apn) },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (askingNotes) {
+                    OutlinedTextField(
+                        value = notes,
+                        onValueChange = { notes = it },
+                        label = { Text("Notes") },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .focusRequester(notesFocus),
+                        minLines = 3,
+                        enabled = !submitting
+                    )
+                    LaunchedEffect(Unit) {
+                        notesFocus.requestFocus()
+                    }
+                } else {
+                    Text(
+                        "Follow up on this property?",
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                    VerdictButton("Yes", Icons.Default.Check, !submitting) {
+                        onVerdict(ScoutVerdict.YES, "")
+                    }
+                    VerdictButton("No", Icons.Default.Close, !submitting) {
+                        onVerdict(ScoutVerdict.NO, "")
+                    }
+                    VerdictButton("Maybe", Icons.Default.QuestionMark, !submitting) {
+                        askingNotes = true
+                    }
+                }
+                
+                if (submitting) {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                }
+                error?.let {
+                    Text(it, color = MaterialTheme.colorScheme.error)
+                }
+            }
+        },
+        confirmButton = {
+            if (askingNotes) {
+                Button(
+                    onClick = { onVerdict(ScoutVerdict.MAYBE, notes) },
+                    enabled = !submitting && notes.isNotBlank()
+                ) {
+                    Text("Submit")
+                }
+            }
+        },
+        dismissButton = {
+            if (askingNotes) {
+                TextButton(onClick = { askingNotes = false }, enabled = !submitting) {
+                    Text("Back")
+                }
+            } else {
+                TextButton(onClick = onDismiss, enabled = !submitting) {
+                    Text("Cancel")
+                }
+            }
+        }
+    )
+}
+
+@Composable
+private fun VerdictButton(
+    label: String,
+    icon: ImageVector,
+    enabled: Boolean,
+    onClick: () -> Unit
+) {
+    FilledTonalButton(
+        onClick = onClick,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(56.dp),
+        enabled = enabled
+    ) {
+        Icon(icon, null)
+        Spacer(Modifier.width(8.dp))
+        Text(label)
     }
 }
 

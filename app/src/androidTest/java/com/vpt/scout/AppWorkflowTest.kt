@@ -3,6 +3,7 @@ package com.vpt.scout
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -12,9 +13,11 @@ import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.ComposeContentTestRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.vpt.scout.ui.screens.ArrivedDialog
 import com.vpt.scout.ui.screens.ListDetailScreen
 import com.vpt.scout.ui.screens.ListsScreen
 import com.vpt.scout.ui.screens.LoginScreen
+import com.vpt.scout.ui.screens.ScoutVerdict
 import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Rule
@@ -149,7 +152,64 @@ class AppWorkflowTest {
         assertEquals(1, scoutClicks)
         assertEquals("001-100-100", service.removedApn)
     }
+
+    @Test
+    fun arrivedDialog_yesAndNoSubmitWithoutNotes() {
+        val verdicts = mutableListOf<Pair<ScoutVerdict, String>>()
+
+        composeRule.setTestContent {
+            ArrivedDialog(
+                property = arrivedProperty,
+                submitting = false,
+                error = null,
+                onVerdict = { verdict, notes -> verdicts += verdict to notes },
+                onDismiss = {}
+            )
+        }
+
+        composeRule.onNodeWithText("123 Test St").assertIsDisplayed()
+        composeRule.onNodeWithText("Yes").performClick()
+        composeRule.onNodeWithText("No").performClick()
+
+        assertEquals(listOf(ScoutVerdict.YES to "", ScoutVerdict.NO to ""), verdicts)
+    }
+
+    @Test
+    fun arrivedDialog_maybeAsksForNotesBeforeSubmitting() {
+        val verdicts = mutableListOf<Pair<ScoutVerdict, String>>()
+
+        composeRule.setTestContent {
+            ArrivedDialog(
+                property = arrivedProperty,
+                submitting = false,
+                error = null,
+                onVerdict = { verdict, notes -> verdicts += verdict to notes },
+                onDismiss = {}
+            )
+        }
+
+        composeRule.onNodeWithText("Maybe").performClick()
+        composeRule.onNodeWithText("Submit").assertIsNotEnabled()
+        assertEquals(emptyList<Pair<ScoutVerdict, String>>(), verdicts)
+
+        composeRule.textField("Notes").performTextInput("gate locked")
+        composeRule.onNodeWithText("Submit").assertIsEnabled().performClick()
+
+        assertEquals(listOf(ScoutVerdict.MAYBE to "gate locked"), verdicts)
+    }
 }
+
+private val arrivedProperty = Property(
+    apn = "001-100-100",
+    address = "123 Test St",
+    city = "OAKLAND",
+    latitude = 37.8,
+    longitude = -122.2,
+    hasVpt = true,
+    conditionScore = 5f,
+    isScouted = false,
+    streetviewImagePath = null
+)
 
 private fun ComposeContentTestRule.setTestContent(content: @androidx.compose.runtime.Composable () -> Unit) {
     setContent {
@@ -198,6 +258,14 @@ private class WorkflowScannerDataService(
     ): PropertiesResponse = pagedProperties.getOrElse(page - 1) {
         PropertiesResponse(emptyList(), 0, page, perPage, 1)
     }
+
+    override suspend fun getMapPropertiesInBounds(
+        south: Double,
+        west: Double,
+        north: Double,
+        east: Double,
+        limit: Int
+    ): List<Property> = emptyList()
 
     override suspend fun getNextProperty(
         latitude: Double,

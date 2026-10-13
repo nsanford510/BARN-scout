@@ -54,7 +54,7 @@ fun LoginScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
-                    text = "Sign in to BARN Scout",
+                    text = "Sign in to BARN",
                     style = MaterialTheme.typography.headlineSmall
                 )
                 Text(
