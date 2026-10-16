@@ -25,7 +25,10 @@ data class Property(
     @SerializedName("tax_year") val taxYear: String? = null,
     @SerializedName("last_payment") val lastPayment: String? = null,
     @SerializedName("owner_name") val ownerName: String? = null,
-    @SerializedName("research_status") val researchStatus: String? = null
+    @SerializedName("research_status") val researchStatus: String? = null,
+    @SerializedName("ai_vacancy_verdict") val aiVacancyVerdict: String? = null,
+    @SerializedName("ai_vacancy_confidence") val aiVacancyConfidence: Float? = null,
+    @SerializedName("site_vacant") val siteVacant: Boolean? = null
 )
 
 data class PropertiesResponse(

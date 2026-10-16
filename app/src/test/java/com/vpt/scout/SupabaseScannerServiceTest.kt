@@ -103,6 +103,56 @@ class SupabaseScannerServiceTest {
     }
 
     @Test
+    fun `getProperties maps ai vacancy filters onto postgrest params`() = runBlocking {
+        server.enqueueJson("""[]""", contentRange = "*/0")
+
+        service().getProperties(
+            PropertyFilters(
+                aiVerdict = "likely_vacant",
+                aiConfidenceMin = "70",
+                siteVacant = "yes",
+                sort = "ai_vacancy_confidence",
+                order = "desc"
+            ),
+            page = 1,
+            perPage = 10
+        )
+
+        val url = server.takeRequest().requestUrl!!
+        assertEquals("eq.likely_vacant", url.queryParameter("ai_vacancy_verdict"))
+        assertEquals("gte.0.7", url.queryParameter("ai_vacancy_confidence"))
+        assertEquals("is.true", url.queryParameter("site_vacant"))
+        assertEquals("ai_vacancy_confidence.desc.nullslast,apn.asc", url.queryParameter("order"))
+    }
+
+    @Test
+    fun `getProperties maps not-assessed verdict and ignores bogus vacancy values`() = runBlocking {
+        server.enqueueJson("""[]""", contentRange = "*/0")
+        service().getProperties(PropertyFilters(aiVerdict = "none", siteVacant = "unknown"), page = 1, perPage = 10)
+        var url = server.takeRequest().requestUrl!!
+        assertEquals("is.null", url.queryParameter("ai_vacancy_verdict"))
+        assertEquals("is.null", url.queryParameter("site_vacant"))
+
+        server.enqueueJson("""[]""", contentRange = "*/0")
+        service().getProperties(
+            PropertyFilters(aiVerdict = "bogus", aiConfidenceMin = "500", siteVacant = "maybe"),
+            page = 1,
+            perPage = 10
+        )
+        url = server.takeRequest().requestUrl!!
+        assertEquals(null, url.queryParameter("ai_vacancy_verdict"))
+        assertEquals(null, url.queryParameter("ai_vacancy_confidence"))
+        assertEquals(null, url.queryParameter("site_vacant"))
+    }
+
+    @Test
+    fun `parseConfidenceMin accepts fractions and percents`() {
+        assertEquals(0.7, parseConfidenceMin("0.7")!!, 1e-9)
+        assertEquals(0.7, parseConfidenceMin("70")!!, 1e-9)
+        listOf(null, "", "abc", "0", "-5", "500").forEach { assertEquals(it, null, parseConfidenceMin(it)) }
+    }
+
+    @Test
     fun `getProperties strips postgrest syntax characters from search terms`() = runBlocking {
         server.enqueueJson("""[]""", contentRange = "*/0")
 
@@ -136,7 +186,10 @@ class SupabaseScannerServiceTest {
                 "tax_year": "2025-2026",
                 "is_out_of_state": false,
                 "is_favorite": false,
-                "is_scouted": true
+                "is_scouted": true,
+                "ai_vacancy_verdict": "likely_vacant",
+                "ai_vacancy_confidence": 0.85,
+                "site_vacant": true
               }
             ]
             """.trimIndent(),
@@ -156,6 +209,9 @@ class SupabaseScannerServiceTest {
         assertEquals("94708", property.zipCode)
         assertEquals("Dec 8, 2025", property.lastPayment)
         assertEquals("failed", property.researchStatus)
+        assertEquals("likely_vacant", property.aiVacancyVerdict)
+        assertEquals(0.85f, property.aiVacancyConfidence!!, 0.0001f)
+        assertEquals(true, property.siteVacant)
     }
 
     @Test

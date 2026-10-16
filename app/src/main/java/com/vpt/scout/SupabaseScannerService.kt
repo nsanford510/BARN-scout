@@ -23,7 +23,8 @@ private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
 internal const val MAP_MARKER_COLUMNS =
     "apn,location,city,situs_zip,zip_code,lat,lng,has_vpt,delinquent,power_status,condition_score," +
         "streetview_image_path,research_status,owner_name,deceased_count,last_sale_date,tax_year," +
-        "last_payment,mailing_address,is_out_of_state,is_favorite,is_scouted"
+        "last_payment,mailing_address,is_out_of_state,is_favorite,is_scouted," +
+        "ai_vacancy_verdict,ai_vacancy_confidence,site_vacant"
 
 /** App sort keys (bills column names) -> map_markers columns. */
 private val SORT_COLUMNS = mapOf(
@@ -39,8 +40,18 @@ private val SORT_COLUMNS = mapOf(
     "tax_year" to "tax_year",
     "situs_zip" to "situs_zip",
     "deceased_count" to "deceased_count",
-    "outreach_score" to "outreach_score"
+    "outreach_score" to "outreach_score",
+    "ai_vacancy_confidence" to "ai_vacancy_confidence"
 )
+
+private val AI_VERDICTS = setOf("likely_vacant", "likely_occupied", "unknown")
+
+/** Minimum AI vacancy confidence as a 0-1 fraction; accepts 0-1 or a 0-100 percent. */
+internal fun parseConfidenceMin(value: String?): Double? {
+    var n = value?.trim()?.toDoubleOrNull() ?: return null
+    if (n > 1) n /= 100
+    return n.takeIf { it > 0 && it <= 1 }
+}
 
 interface ScannerDataService {
     suspend fun getProperties(filters: PropertyFilters, page: Int = 1, perPage: Int = 50): PropertiesResponse
@@ -470,7 +481,10 @@ class SupabaseScannerService(
             taxYear = string("tax_year"),
             lastPayment = string("last_payment"),
             ownerName = string("owner_name"),
-            researchStatus = string("research_status")
+            researchStatus = string("research_status"),
+            aiVacancyVerdict = string("ai_vacancy_verdict"),
+            aiVacancyConfidence = get("ai_vacancy_confidence")?.takeUnless { it.isJsonNull }?.asFloat,
+            siteVacant = get("site_vacant")?.takeUnless { it.isJsonNull }?.asBoolean
         )
     }
 
@@ -501,6 +515,16 @@ class SupabaseScannerService(
             "fair" -> addQueryParameter("and", "(condition_score.gte.4,condition_score.lt.7)")
             "poor" -> addQueryParameter("condition_score", "lt.4")
             "unscored" -> addQueryParameter("condition_score", "is.null")
+        }
+        when (val verdict = filters.aiVerdict?.trim()?.lowercase()) {
+            "none" -> addQueryParameter("ai_vacancy_verdict", "is.null")
+            in AI_VERDICTS -> addQueryParameter("ai_vacancy_verdict", "eq.$verdict")
+        }
+        parseConfidenceMin(filters.aiConfidenceMin)?.let { addQueryParameter("ai_vacancy_confidence", "gte.$it") }
+        when (filters.siteVacant?.trim()?.lowercase()) {
+            "yes" -> addQueryParameter("site_vacant", "is.true")
+            "no" -> addQueryParameter("site_vacant", "is.false")
+            "unknown" -> addQueryParameter("site_vacant", "is.null")
         }
     }
 

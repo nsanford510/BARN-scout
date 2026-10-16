@@ -105,6 +105,9 @@ class ExploreFilters {
     var outOfStateOnly by mutableStateOf(false)
     var researchFilter by mutableStateOf("")
     var ownerName by mutableStateOf("")
+    var aiVerdictFilter by mutableStateOf("")
+    var aiConfidenceFilter by mutableStateOf("")
+    var siteVacantFilter by mutableStateOf("")
     var sortBy by mutableStateOf("location_of_property")
     var sortOrder by mutableStateOf("asc")
     var showUnscoutedOnly by mutableStateOf(false)
@@ -143,6 +146,9 @@ fun PropertiesScreen(
     var outOfStateOnly by filters::outOfStateOnly
     var researchFilter by filters::researchFilter
     var ownerName by filters::ownerName
+    var aiVerdictFilter by filters::aiVerdictFilter
+    var aiConfidenceFilter by filters::aiConfidenceFilter
+    var siteVacantFilter by filters::siteVacantFilter
     var sortBy by filters::sortBy
     var sortOrder by filters::sortOrder
     var showUnscoutedOnly by filters::showUnscoutedOnly
@@ -176,6 +182,9 @@ fun PropertiesScreen(
                     outOfStateOnly = outOfStateOnly,
                     research = researchFilter.takeIf { it.isNotBlank() },
                     ownerName = ownerName.takeIf { it.isNotBlank() },
+                    aiVerdict = aiVerdictFilter.takeIf { it.isNotBlank() },
+                    aiConfidenceMin = aiConfidenceFilter.takeIf { it.isNotBlank() },
+                    siteVacant = siteVacantFilter.takeIf { it.isNotBlank() },
                     sort = sortBy,
                     order = sortOrder,
                     scouted = if (showUnscoutedOnly) false else null,
@@ -215,6 +224,9 @@ fun PropertiesScreen(
         outOfStateOnly,
         researchFilter,
         ownerName,
+        aiVerdictFilter,
+        aiConfidenceFilter,
+        siteVacantFilter,
         sortBy,
         sortOrder,
         showUnscoutedOnly,
@@ -275,6 +287,12 @@ fun PropertiesScreen(
                 onResearchFilterChange = { researchFilter = it },
                 ownerName = ownerName,
                 onOwnerNameChange = { ownerName = it },
+                aiVerdictFilter = aiVerdictFilter,
+                onAiVerdictFilterChange = { aiVerdictFilter = it },
+                aiConfidenceFilter = aiConfidenceFilter,
+                onAiConfidenceFilterChange = { aiConfidenceFilter = it },
+                siteVacantFilter = siteVacantFilter,
+                onSiteVacantFilterChange = { siteVacantFilter = it },
                 sortBy = sortBy,
                 onSortByChange = { sortBy = it },
                 sortOrder = sortOrder,
@@ -343,6 +361,9 @@ fun PropertiesScreen(
                                                 outOfStateOnly = outOfStateOnly,
                                                 research = researchFilter.takeIf { it.isNotBlank() },
                                                 ownerName = ownerName.takeIf { it.isNotBlank() },
+                                                aiVerdict = aiVerdictFilter.takeIf { it.isNotBlank() },
+                                                aiConfidenceMin = aiConfidenceFilter.takeIf { it.isNotBlank() },
+                                                siteVacant = siteVacantFilter.takeIf { it.isNotBlank() },
                                                 sort = sortBy,
                                                 order = sortOrder,
                                                 scouted = if (showUnscoutedOnly) false else null,
@@ -598,6 +619,12 @@ private fun FilterBar(
     onResearchFilterChange: (String) -> Unit,
     ownerName: String,
     onOwnerNameChange: (String) -> Unit,
+    aiVerdictFilter: String,
+    onAiVerdictFilterChange: (String) -> Unit,
+    aiConfidenceFilter: String,
+    onAiConfidenceFilterChange: (String) -> Unit,
+    siteVacantFilter: String,
+    onSiteVacantFilterChange: (String) -> Unit,
     sortBy: String,
     onSortByChange: (String) -> Unit,
     sortOrder: String,
@@ -615,11 +642,21 @@ private fun FilterBar(
         "location_of_property" to "Address",
         "condition_score" to "Condition",
         "city" to "City",
-        "added_at" to "Added"
+        "added_at" to "Added",
+        "ai_vacancy_confidence" to "AI confidence"
     )
     val conditionOptions = listOf("" to "Any", "good" to "Good", "fair" to "Fair", "poor" to "Poor")
     val researchOptions = listOf("" to "Any", "completed" to "Complete", "unchecked" to "Unchecked")
     val powerOptions = listOf("" to "Any", "on" to "On", "off" to "Off", "unknown" to "Unknown")
+    val aiVerdictOptions = listOf(
+        "" to "Any",
+        "likely_vacant" to "Likely vacant",
+        "likely_occupied" to "Likely occupied",
+        "unknown" to "Unknown",
+        "none" to "Not assessed"
+    )
+    val aiConfidenceOptions = listOf("" to "Any") + listOf(50, 70, 80, 90).map { "$it" to "≥ $it%" }
+    val siteVacantOptions = listOf("" to "Any", "yes" to "Yes", "no" to "No", "unknown" to "Unknown")
 
     Column(
         modifier = Modifier
@@ -699,11 +736,32 @@ private fun FilterBar(
                     modifier = Modifier.width(130.dp)
                 )
                 SimpleDropdownField(
+                    label = "AI verdict",
+                    selectedLabel = aiVerdictOptions.firstOrNull { it.first == aiVerdictFilter }?.second ?: "Any",
+                    options = aiVerdictOptions,
+                    onSelected = onAiVerdictFilterChange,
+                    modifier = Modifier.width(170.dp)
+                )
+                SimpleDropdownField(
+                    label = "AI confidence",
+                    selectedLabel = aiConfidenceOptions.firstOrNull { it.first == aiConfidenceFilter }?.second ?: "Any",
+                    options = aiConfidenceOptions,
+                    onSelected = onAiConfidenceFilterChange,
+                    modifier = Modifier.width(140.dp)
+                )
+                SimpleDropdownField(
+                    label = "Site vacant",
+                    selectedLabel = siteVacantOptions.firstOrNull { it.first == siteVacantFilter }?.second ?: "Any",
+                    options = siteVacantOptions,
+                    onSelected = onSiteVacantFilterChange,
+                    modifier = Modifier.width(130.dp)
+                )
+                SimpleDropdownField(
                     label = "Sort",
                     selectedLabel = sortOptions.firstOrNull { it.first == sortBy }?.second ?: "Address",
                     options = sortOptions,
                     onSelected = onSortByChange,
-                    modifier = Modifier.width(130.dp)
+                    modifier = Modifier.width(150.dp)
                 )
                 SimpleDropdownField(
                     label = "Order",

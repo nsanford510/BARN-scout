@@ -78,6 +78,16 @@ fun PropertyBadges(property: Property, modifier: Modifier = Modifier) {
                 Text("${"%.0f".format(score)}/10", fontSize = 10.sp)
             }
         }
+        when (property.aiVacancyVerdict) {
+            "likely_vacant" -> Color(0xFFE53935) to "AI vacant"
+            "likely_occupied" -> Color(0xFF2E7D32) to "AI occupied"
+            else -> null
+        }?.let { (color, label) ->
+            val pct = property.aiVacancyConfidence?.let { " ${"%.0f".format(it * 100)}%" }.orEmpty()
+            Badge(containerColor = color) {
+                Text("$label$pct", fontSize = 10.sp)
+            }
+        }
         if (property.isOutOfState) {
             Badge(containerColor = Color(0xFF7B1FA2)) {
                 Text("OOS", fontSize = 10.sp)
@@ -192,6 +202,13 @@ fun PropertyDetailSheet(
             DetailLine("Last payment", property.lastPayment)
             DetailLine("Tax year", property.taxYear)
             DetailLine("Research", property.researchStatus)
+            DetailLine(
+                "AI vacancy",
+                property.aiVacancyVerdict?.replace('_', ' ')?.let { verdict ->
+                    property.aiVacancyConfidence?.let { "$verdict (${"%.0f".format(it * 100)}%)" } ?: verdict
+                }
+            )
+            DetailLine("Site vacant", property.siteVacant?.let { if (it) "Yes" else "No" })
 
             Spacer(modifier = Modifier.height(16.dp))
             Button(
