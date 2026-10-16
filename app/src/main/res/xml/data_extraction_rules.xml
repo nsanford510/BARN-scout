@@ -3,5 +3,11 @@
     <cloud-backup>
         <include domain="sharedpref" path="."/>
         <exclude domain="sharedpref" path="device.xml"/>
+        <!-- Never copy sign-in tokens into backups. -->
+        <exclude domain="sharedpref" path="supabase_auth.xml"/>
     </cloud-backup>
+    <!-- Excludes only, so everything else still transfers as before. -->
+    <device-transfer>
+        <exclude domain="sharedpref" path="supabase_auth.xml"/>
+    </device-transfer>
 </data-extraction-rules>

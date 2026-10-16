@@ -2,6 +2,7 @@ package com.vpt.scout.ui.screens
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -42,7 +43,9 @@ internal fun statsLoadErrorMessage(throwable: Throwable): String {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StatsScreen(
-    scoutRepository: ScoutRepository
+    scoutRepository: ScoutRepository,
+    signedInEmail: String? = null,
+    onSignOut: () -> Unit = {}
 ) {
     val scope = rememberCoroutineScope()
     var stats by remember { mutableStateOf<ScoutStats?>(null) }
@@ -78,6 +81,12 @@ fun StatsScreen(
                         }
                     }) {
                         Icon(Icons.Default.Refresh, "Refresh")
+                    }
+                    IconButton(onClick = onSignOut) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.Logout,
+                            contentDescription = signedInEmail?.let { "Sign out $it" } ?: "Sign out"
+                        )
                     }
                 }
             )

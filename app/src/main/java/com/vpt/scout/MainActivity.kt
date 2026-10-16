@@ -117,23 +117,54 @@ fun ScoutApp(
     val loginScope = rememberCoroutineScope()
     var loginError by remember { mutableStateOf<String?>(null) }
     var loginLoading by remember { mutableStateOf(false) }
+    var loginInfo by remember { mutableStateOf<String?>(null) }
     var lastEmail by remember { mutableStateOf(authState.email ?: "") }
+
+    // A stored session may belong to someone whose access was revoked since last launch.
+    LaunchedEffect(authState.userId) {
+        if (authState.isAuthenticated &&
+            container.authManager.verifyAccess() == AccessCheck.NOT_APPROVED
+        ) {
+            loginError = SupabaseAuthManager.NOT_APPROVED_MESSAGE
+        }
+    }
 
     if (!authState.isAuthenticated) {
         LoginScreen(
             initialEmail = lastEmail,
             isLoading = loginLoading,
             errorMessage = loginError,
+            infoMessage = loginInfo,
             onLogin = { email, password ->
                 lastEmail = email
                 loginScope.launch {
                     loginLoading = true
                     loginError = null
+                    loginInfo = null
                     val result = container.authManager.signIn(email, password)
                     if (result.isFailure) {
                         loginError = result.exceptionOrNull()?.message ?: "Login failed."
                     }
                     loginLoading = false
+                }
+            },
+            onForgotPassword = { email ->
+                lastEmail = email
+                loginError = null
+                loginInfo = null
+                if (email.isBlank()) {
+                    loginError = "Enter your email first, then tap \"Forgot password?\"."
+                } else {
+                    loginScope.launch {
+                        loginLoading = true
+                        val result = container.authManager.requestPasswordReset(email)
+                        if (result.isSuccess) {
+                            loginInfo = "If that email has an account, a reset link is on its way."
+                        } else {
+                            loginError = result.exceptionOrNull()?.message ?: "Could not send reset email."
+                        }
+                        loginLoading = false
+                    }
                 }
             }
         )
@@ -224,7 +255,13 @@ fun ScoutApp(
             // Stats Screen
             composable(Screen.Stats.route) {
                 StatsScreen(
-                    scoutRepository = container.scoutRepository
+                    scoutRepository = container.scoutRepository,
+                    signedInEmail = authState.email,
+                    onSignOut = {
+                        loginError = null
+                        loginInfo = null
+                        loginScope.launch { container.authManager.logout() }
+                    }
                 )
             }
             

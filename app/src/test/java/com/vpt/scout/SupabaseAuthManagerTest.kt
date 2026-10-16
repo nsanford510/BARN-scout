@@ -48,6 +48,7 @@ class SupabaseAuthManagerTest {
                     """.trimIndent()
                 )
         )
+        server.enqueue(approved(true))
 
         val authManager = SupabaseAuthManager(
             prefs = prefs,
@@ -214,6 +215,7 @@ class SupabaseAuthManagerTest {
                     """.trimIndent()
                 )
         )
+        server.enqueue(approved(true))
 
         val authManager = SupabaseAuthManager(
             prefs = prefs,
@@ -231,6 +233,120 @@ class SupabaseAuthManagerTest {
         assertNull(prefs.getString("user_id", null))
         assertNull(prefs.getString("email", null))
     }
+
+    @Test
+    fun `signIn checks approval with the new access token`() = runBlocking {
+        server.enqueue(tokenResponse())
+        server.enqueue(approved(true))
+        val authManager = manager()
+
+        authManager.signIn("agent@example.com", "secret")
+
+        server.takeRequest()
+        val check = server.takeRequest()
+        assertEquals("/rest/v1/rpc/has_app_access", check.path)
+        assertEquals("Bearer access-123", check.getHeader("Authorization"))
+        assertEquals("anon-key", check.getHeader("apikey"))
+    }
+
+    @Test
+    fun `signIn rejects unapproved accounts and does not persist session`() = runBlocking {
+        server.enqueue(tokenResponse())
+        server.enqueue(approved(false))
+        val authManager = manager()
+
+        val result = authManager.signIn("agent@example.com", "secret")
+
+        assertTrue(result.isFailure)
+        assertEquals(SupabaseAuthManager.NOT_APPROVED_MESSAGE, result.exceptionOrNull()?.message)
+        assertFalse(authManager.state.value.isAuthenticated)
+        assertNull(prefs.getString("access_token", null))
+    }
+
+    @Test
+    fun `signIn fails closed when approval cannot be checked`() = runBlocking {
+        server.enqueue(tokenResponse())
+        server.enqueue(MockResponse().setResponseCode(404).setBody("""{"message":"not found"}"""))
+        val authManager = manager()
+
+        val result = authManager.signIn("agent@example.com", "secret")
+
+        assertTrue(result.isFailure)
+        assertFalse(authManager.state.value.isAuthenticated)
+        assertNull(prefs.getString("access_token", null))
+    }
+
+    @Test
+    fun `verifyAccess signs out revoked users but keeps session on network errors`() = runBlocking {
+        prefs.edit().putString("access_token", "stored").putString("refresh_token", "r").apply()
+        val authManager = manager()
+
+        server.enqueue(MockResponse().setResponseCode(503))
+        assertEquals(AccessCheck.UNKNOWN, authManager.verifyAccess())
+        assertTrue(authManager.state.value.isAuthenticated)
+
+        server.enqueue(approved(false))
+        assertEquals(AccessCheck.NOT_APPROVED, authManager.verifyAccess())
+        assertFalse(authManager.state.value.isAuthenticated)
+        assertNull(prefs.getString("access_token", null))
+    }
+
+    @Test
+    fun `requestPasswordReset posts email with redirect to the web reset page`() = runBlocking {
+        server.enqueue(MockResponse().setResponseCode(200).setBody("{}"))
+        val authManager = manager(resetUrl = "https://barn.example/reset-password")
+
+        val result = authManager.requestPasswordReset("  agent@example.com ")
+
+        assertTrue(result.isSuccess)
+        val request = server.takeRequest()
+        assertEquals("/auth/v1/recover", request.requestUrl?.encodedPath)
+        assertEquals("https://barn.example/reset-password", request.requestUrl?.queryParameter("redirect_to"))
+        assertEquals("""{"email":"agent@example.com"}""", request.body.readUtf8())
+    }
+
+    @Test
+    fun `requestPasswordReset surfaces server errors`() = runBlocking {
+        server.enqueue(MockResponse().setResponseCode(429).setBody("""{"msg":"Too many requests"}"""))
+
+        val result = manager().requestPasswordReset("agent@example.com")
+
+        assertTrue(result.isFailure)
+        assertEquals("Too many requests", result.exceptionOrNull()?.message)
+    }
+
+    @Test
+    fun `logout revokes the session on the server and clears it locally`() = runBlocking {
+        prefs.edit().putString("access_token", "stored").putString("refresh_token", "r").apply()
+        server.enqueue(MockResponse().setResponseCode(204))
+        val authManager = manager()
+
+        authManager.logout()
+
+        val request = server.takeRequest()
+        assertEquals("/auth/v1/logout", request.path)
+        assertEquals("Bearer stored", request.getHeader("Authorization"))
+        assertFalse(authManager.state.value.isAuthenticated)
+        assertNull(prefs.getString("refresh_token", null))
+    }
+
+    private fun manager(resetUrl: String = "") = SupabaseAuthManager(
+        prefs = prefs,
+        httpClient = OkHttpClient(),
+        supabaseUrl = server.url("/").toString().trimEnd('/'),
+        supabaseAnonKey = "anon-key",
+        passwordResetRedirectUrl = resetUrl
+    )
+
+    private fun tokenResponse() = MockResponse()
+        .setResponseCode(200)
+        .addHeader("Content-Type", "application/json")
+        .setBody("""{"access_token":"access-123","refresh_token":"refresh-456","user":{"id":"user-1","email":"agent@example.com"}}""")
+
+    private fun approved(value: Boolean) = MockResponse()
+        .setResponseCode(200)
+        .addHeader("Content-Type", "application/json")
+        .setBody(value.toString())
 }
 
 private class InMemorySharedPreferences : SharedPreferences {

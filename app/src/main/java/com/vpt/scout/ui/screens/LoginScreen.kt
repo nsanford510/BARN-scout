@@ -10,6 +10,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -26,7 +27,9 @@ fun LoginScreen(
     initialEmail: String,
     isLoading: Boolean,
     errorMessage: String?,
-    onLogin: (email: String, password: String) -> Unit
+    onLogin: (email: String, password: String) -> Unit,
+    infoMessage: String? = null,
+    onForgotPassword: (email: String) -> Unit = {}
 ) {
     var email by rememberSaveable { mutableStateOf(initialEmail) }
     var password by rememberSaveable { mutableStateOf("") }
@@ -58,7 +61,7 @@ fun LoginScreen(
                     style = MaterialTheme.typography.headlineSmall
                 )
                 Text(
-                    text = "Use the same Supabase account as BARN admin.",
+                    text = "Access is invite-only. Ask an admin for an account.",
                     style = MaterialTheme.typography.bodyMedium
                 )
 
@@ -78,6 +81,14 @@ fun LoginScreen(
                     modifier = Modifier.fillMaxWidth()
                 )
 
+                if (!infoMessage.isNullOrBlank()) {
+                    Text(
+                        text = infoMessage,
+                        color = MaterialTheme.colorScheme.primary,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+
                 if (!errorMessage.isNullOrBlank()) {
                     Text(
                         text = errorMessage,
@@ -92,6 +103,14 @@ fun LoginScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(if (isLoading) "Signing in..." else "Sign In")
+                }
+
+                TextButton(
+                    onClick = { onForgotPassword(email.trim()) },
+                    enabled = !isLoading,
+                    modifier = Modifier.align(Alignment.End)
+                ) {
+                    Text("Forgot password?")
                 }
             }
         }
