@@ -29,7 +29,7 @@ internal fun validPublishableKey(key: String): Boolean {
     if (key.startsWith("sb_publishable_") && key.length > 30) return true
     return runCatching {
         val body = String(Base64.decode(key.split('.')[1], Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING))
-        JsonParser.parseString(body).asJsonObject.get("role")?.asString == "anon"
+        JsonParser().parse(body).asJsonObject.get("role")?.asString == "anon"
     }.getOrDefault(false)
 }
 

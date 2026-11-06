@@ -38,7 +38,7 @@ class AssistantServiceTest {
         assertEquals("/functions/v1/property-assistant", request.path)
         assertEquals("Bearer user-token", request.getHeader("Authorization"))
         assertEquals("public-anon", request.getHeader("apikey"))
-        assertEquals("123", JsonParser.parseString(request.body.readUtf8()).asJsonObject.get("apn").asString)
+        assertEquals("123", JsonParser().parse(request.body.readUtf8()).asJsonObject.get("apn").asString)
     }
 
     @Test fun `refreshes expired user token once before retrying`() = runBlocking {

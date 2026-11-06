@@ -101,7 +101,7 @@ class LiveConnection(private val service: AssistantService, private val events: 
             override fun onMessage(webSocket: WebSocket, text: String) {
                 if (closed) return
                 runCatching {
-                    val frame = JsonParser.parseString(text).asJsonObject
+                    val frame = JsonParser().parse(text).asJsonObject
                     when (frame.get("type")?.asString) {
                         "ready" -> { ready = true; events.ready() }
                         "user", "assistant" -> events.transcript(frame.get("type").asString, frame.get("text")?.asString.orEmpty())

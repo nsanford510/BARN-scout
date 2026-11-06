@@ -60,3 +60,25 @@ jobs:
         run: |
           tag="gemini-preview-${GITHUB_RUN_NUMBER}"
           gh release create "$tag" BARN-Gemini-Preview.apk --target "$GITHUB_SHA" --prerelease --title "BARN Gemini Preview ${GITHUB_RUN_NUMBER}" --notes "Android preview with typed research and live voice. Installs beside production BARN; sign in again. Requires the property-assistant backend from nsanford510/barn PR 66. If this build has no Supabase publishable key, enter it on the setup screen. Map tiles need the existing Maps build key. Debug-signed preview; not a production replacement."
+      - name: Enable emulator acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Check Assistant UI and capture screenshot
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: |
+            gradle --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.vpt.scout.AssistantScreenTest
+            adb pull /sdcard/Android/data/com.vpt.scout.geminipreview/files/assistant-screen.png assistant-screen.png
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: assistant-ui-check
+          path: |
+            assistant-screen.png
+            app/build/reports/androidTests/
