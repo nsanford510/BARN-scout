@@ -24,6 +24,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.13'
+          cache-read-only: false
       - name: Configure public app connection
         env:
           SUPABASE_URL: ${{ vars.SUPABASE_URL }}
@@ -67,6 +68,8 @@ jobs:
           sudo udevadm trigger --name-match=kvm
       - name: Check Assistant UI and capture screenshot
         uses: reactivecircus/android-emulator-runner@v2
+        env:
+          GH_TOKEN: ${{ github.token }}
         with:
           api-level: 34
           arch: x86_64
@@ -74,7 +77,8 @@ jobs:
           disable-animations: true
           script: |
             gradle --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.vpt.scout.AssistantScreenTest
-            adb pull /sdcard/Android/data/com.vpt.scout.geminipreview/files/assistant-screen.png assistant-screen.png
+            adb pull /sdcard/Download/BARN-assistant-screen.png assistant-screen.png
+            gh release upload "gemini-preview-${GITHUB_RUN_NUMBER}" assistant-screen.png --clobber
       - uses: actions/upload-artifact@v4
         if: always()
         with:
