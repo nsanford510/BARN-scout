@@ -18,6 +18,9 @@ jobs:
       - uses: android-actions/setup-android@v3
         with:
           packages: 'platform-tools platforms;android-34 build-tools;35.0.0'
+      - name: Remove stale tracked build outputs
+        # Use the verified Gradle distribution below, never the repository's obsolete wrapper JAR.
+        run: rm -rf .gradle build app/build gradle/wrapper/gradle-wrapper.jar local.properties
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.13'
