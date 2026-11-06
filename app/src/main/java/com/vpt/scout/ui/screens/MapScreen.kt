@@ -43,7 +43,8 @@ import kotlin.math.*
 @Composable
 fun MapScreen(
     propertyRepository: PropertyRepository,
-    listRepository: ListRepository
+    listRepository: ListRepository,
+    onResearchProperty: ((String) -> Unit)? = null
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -344,6 +345,7 @@ fun MapScreen(
                 }
                 PropertyDetailSheet(
                     property = entity.toProperty(),
+                    onResearch = onResearchProperty?.let { research -> { selectedProperty = null; research(entity.apn) } },
                     distanceText = distanceText,
                     onDismiss = { selectedProperty = null },
                     onAddToList = { showListDialog = true }

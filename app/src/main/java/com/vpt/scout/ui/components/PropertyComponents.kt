@@ -146,7 +146,8 @@ fun PropertyDetailSheet(
     property: Property,
     onDismiss: () -> Unit,
     onAddToList: (() -> Unit)? = null,
-    distanceText: String? = null
+    distanceText: String? = null,
+    onResearch: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     ModalBottomSheet(
@@ -229,6 +230,9 @@ fun PropertyDetailSheet(
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Add to route list")
                 }
+            }
+            onResearch?.let {
+                OutlinedButton(onClick = it, modifier = Modifier.fillMaxWidth()) { Text("Ask Assistant about this property") }
             }
         }
     }

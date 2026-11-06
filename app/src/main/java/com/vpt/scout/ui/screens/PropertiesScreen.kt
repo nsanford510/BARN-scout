@@ -126,7 +126,8 @@ fun PropertiesScreen(
     listRepository: ListRepository,
     proximityAlertPreferences: ProximityAlertPreferences,
     requestProximityPermissions: ((Boolean) -> Unit) -> Unit,
-    onNavigateToScout: (city: String?, vptOnly: Boolean, listId: Long?) -> Unit
+    onNavigateToScout: (city: String?, vptOnly: Boolean, listId: Long?) -> Unit,
+    onResearchProperty: ((String) -> Unit)? = null
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -456,6 +457,7 @@ fun PropertiesScreen(
     detailProperty?.let { property ->
         PropertyDetailSheet(
             property = property,
+            onResearch = onResearchProperty?.let { research -> { detailProperty = null; research(property.apn) } },
             onDismiss = { detailProperty = null },
             onAddToList = {
                 selectedApns = setOf(property.apn)

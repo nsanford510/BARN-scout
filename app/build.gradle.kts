@@ -43,6 +43,12 @@ android {
     }
 
     buildTypes {
+        debug {
+            // Install the preview beside the production app without its private release signing key.
+            applicationIdSuffix = ".geminipreview"
+            versionNameSuffix = "-gemini-preview"
+            resValue("string", "app_name", "BARN Gemini Preview")
+        }
         release {
             // Unsigned when keystore.properties is missing (e.g. CI without the key).
             signingConfig = signingConfigs.findByName("release")
