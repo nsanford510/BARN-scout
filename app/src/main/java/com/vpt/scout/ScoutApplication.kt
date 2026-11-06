@@ -21,8 +21,16 @@ class ScoutApplication : Application() {
  * Provides singleton instances of repositories and database.
  */
 class AppContainer(private val context: Application) {
+    val backendConfiguration by lazy { BackendConfiguration(context) }
+    val assistantService by lazy { com.vpt.scout.assistant.AssistantService(authManager) }
     val authManager: SupabaseAuthManager by lazy {
-        SupabaseAuthManager(context)
+        SupabaseAuthManager(
+            prefs = context.getSharedPreferences("supabase_auth", android.content.Context.MODE_PRIVATE),
+            httpClient = okhttp3.OkHttpClient(),
+            supabaseUrl = backendConfiguration.url.trimEnd('/'),
+            supabaseAnonKey = backendConfiguration.key,
+            passwordResetRedirectUrl = BuildConfig.WEB_APP_URL.trimEnd('/') + "/reset-password"
+        )
     }
     
     val database: ScoutDatabase by lazy {

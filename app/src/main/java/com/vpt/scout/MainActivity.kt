@@ -106,6 +106,7 @@ sealed class Screen(val route: String, val label: String, val icon: ImageVector)
     object Gallery : Screen("gallery", "Gallery", Icons.Default.PhotoLibrary)
     object Route : Screen("route", "Route", Icons.Default.Route)
     object Stats : Screen("stats", "Stats", Icons.Default.BarChart)
+    object Assistant : Screen("assistant", "Assistant", Icons.Default.Chat)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -116,6 +117,10 @@ fun ScoutApp(
     onRouteConsumed: () -> Unit = {},
     requestProximityPermissions: ((Boolean) -> Unit) -> Unit = {}
 ) {
+    if (!container.backendConfiguration.configured) {
+        BackendSetupScreen(container.backendConfiguration)
+        return
+    }
     val authState by container.authManager.state.collectAsState()
     val loginScope = rememberCoroutineScope()
     val uriHandler = LocalUriHandler.current
@@ -143,6 +148,14 @@ fun ScoutApp(
     }
 
     val navController = rememberNavController()
+    val assistant = remember(authState.userId) { com.vpt.scout.assistant.AssistantController(container.assistantService) }
+    DisposableEffect(assistant) { onDispose { assistant.close() } }
+    val researchProperty: (String) -> Unit = { apn ->
+        assistant.stop()
+        assistant.newConversation()
+        assistant.setApn(apn)
+        navController.navigate(Screen.Assistant.route) { launchSingleTop = true }
+    }
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
 
@@ -155,7 +168,7 @@ fun ScoutApp(
         }
     }
     
-    val bottomNavScreens = listOf(Screen.Properties, Screen.Map, Screen.Gallery, Screen.Route, Screen.Stats)
+    val bottomNavScreens = listOf(Screen.Properties, Screen.Map, Screen.Gallery, Screen.Route, Screen.Assistant, Screen.Stats)
     // Shared so the List and Gallery tabs show the same search results.
     val exploreFilters = remember { ExploreFilters() }
     // Show bottom bar for main tabs only (not for detail screens)
@@ -197,6 +210,7 @@ fun ScoutApp(
                         listRepository = container.listRepository,
                         proximityAlertPreferences = container.proximityAlertPreferences,
                         requestProximityPermissions = requestProximityPermissions,
+                        onResearchProperty = researchProperty,
                         onNavigateToScout = { city, vptOnly, listId ->
                             navController.navigate(
                                 "scout?city=${city ?: ""}&vpt=${if (vptOnly) "1" else "0"}&listId=${listId ?: ""}"
@@ -219,9 +233,12 @@ fun ScoutApp(
             composable(Screen.Map.route) {
                 MapScreen(
                     propertyRepository = container.propertyRepository,
-                    listRepository = container.listRepository
+                    listRepository = container.listRepository,
+                    onResearchProperty = researchProperty
                 )
             }
+
+            composable(Screen.Assistant.route) { AssistantScreen(assistant) }
             
             // Stats Screen
             composable(Screen.Stats.route) {
